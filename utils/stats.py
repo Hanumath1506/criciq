@@ -131,6 +131,7 @@ def get_player_form(df: pd.DataFrame, player_name: str, role: str, last_n: int =
         date = group["start_date"].iloc[0].date().isoformat()
 
         if role == "batter":
+            opponent = group["bowling_team"].iloc[0]
             balls_faced = int(group[group["wides"].isna() | (group["wides"] == 0)].shape[0])
             runs_scored = int(group["runs_off_bat"].sum())
             dismissed = int(group["player_dismissed"].eq(player_name).any())
@@ -138,11 +139,13 @@ def get_player_form(df: pd.DataFrame, player_name: str, role: str, last_n: int =
                 "match_id": match_id,
                 "innings": innings,
                 "date": date,
+                "opponent": opponent,
                 "runs_scored": runs_scored,
                 "balls_faced": balls_faced,
                 "dismissed": bool(dismissed),
             })
         else:
+            opponent = group["batting_team"].iloc[0]
             legal_balls = int(group[
                 (group["wides"].isna() | (group["wides"] == 0))
                 & (group["noballs"].isna() | (group["noballs"] == 0))
@@ -157,6 +160,7 @@ def get_player_form(df: pd.DataFrame, player_name: str, role: str, last_n: int =
                 "match_id": match_id,
                 "innings": innings,
                 "date": date,
+                "opponent": opponent,
                 "overs": overs,
                 "runs_conceded": runs_conceded,
                 "wickets": wickets,
