@@ -69,3 +69,35 @@ def get_bowling_stats(df: pd.DataFrame, player_name: str) -> dict:
         "economy": economy,
         "average": average,
     }
+
+
+def get_head_to_head(df: pd.DataFrame, batter: str, bowler: str) -> dict:
+    h2h = df[(df["striker"] == batter) & (df["bowler"] == bowler)]
+
+    balls_faced = int(h2h[h2h["wides"].isna() | (h2h["wides"] == 0)].shape[0])
+    runs_scored = int(h2h["runs_off_bat"].sum())
+    dismissals = int(h2h[h2h["player_dismissed"] == batter].shape[0])
+    matches = h2h["match_id"].nunique()
+
+    strike_rate = round((runs_scored / balls_faced) * 100, 2) if balls_faced > 0 else 0.0
+
+    legal_balls = int(
+        h2h[
+            (h2h["wides"].isna() | (h2h["wides"] == 0))
+            & (h2h["noballs"].isna() | (h2h["noballs"] == 0))
+        ].shape[0]
+    )
+    runs_conceded = int(h2h["runs_off_bat"].sum() + h2h["extras"].sum())
+    overs = legal_balls / 6
+    economy = round(runs_conceded / overs, 2) if overs > 0 else 0.0
+
+    return {
+        "batter": batter,
+        "bowler": bowler,
+        "matches": matches,
+        "balls_faced": balls_faced,
+        "runs_scored": runs_scored,
+        "dismissals": dismissals,
+        "strike_rate": strike_rate,
+        "economy": economy,
+    }
