@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from utils.normalizer import normalize_team_name
+
 logger = logging.getLogger(__name__)
 
 _WANTED_FIELDS = {
@@ -111,6 +113,10 @@ def load_match_info(folder_path: str | Path) -> pd.DataFrame:
     ]
     # Keep only known columns — extra keys from future format versions are dropped
     df = df[[c for c in column_order if c in df.columns]]
+
+    for col in ("team1", "team2", "toss_winner", "winner"):
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: normalize_team_name(x) if pd.notna(x) else x)
 
     logger.info("Loaded %d match records from %s", len(df), folder)
     return df
