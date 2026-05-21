@@ -101,3 +101,65 @@ def get_head_to_head(df: pd.DataFrame, batter: str, bowler: str) -> dict:
         "strike_rate": strike_rate,
         "economy": economy,
     }
+
+
+def get_player_form(df: pd.DataFrame, player_name: str, role: str, last_n: int = 10) -> list[dict]:
+    if role == "batter":
+        player_df = df[df["striker"] == player_name]
+    elif role == "bowler":
+        player_df = df[df["bowler"] == player_name]
+    else:
+        raise ValueError("role must be 'batter' or 'bowler'")
+
+    player_df = player_df.copy()
+    player_df["start_date"] = pd.to_datetime(player_df["start_date"])
+
+    innings_groups = (
+        player_df.sort_values("start_date")
+        .groupby(["match_id", "innings"], sort=False)
+    )
+
+    # Preserve chronological order of innings
+    ordered_keys = list(dict.fromkeys(
+        (row["match_id"], row["innings"])
+        for _, row in player_df.sort_values("start_date").iterrows()
+    ))
+
+    result = []
+    for match_id, innings in ordered_keys[-last_n:]:
+        group = innings_groups.get_group((match_id, innings))
+        date = group["start_date"].iloc[0].date().isoformat()
+
+        if role == "batter":
+            balls_faced = int(group[group["wides"].isna() | (group["wides"] == 0)].shape[0])
+            runs_scored = int(group["runs_off_bat"].sum())
+            dismissed = int(group["player_dismissed"].eq(player_name).any())
+            result.append({
+                "match_id": match_id,
+                "innings": innings,
+                "date": date,
+                "runs_scored": runs_scored,
+                "balls_faced": balls_faced,
+                "dismissed": bool(dismissed),
+            })
+        else:
+            legal_balls = int(group[
+                (group["wides"].isna() | (group["wides"] == 0))
+                & (group["noballs"].isna() | (group["noballs"] == 0))
+            ].shape[0])
+            runs_conceded = int(group["runs_off_bat"].sum() + group["extras"].sum())
+            wickets = int(group[
+                group["wicket_type"].notna()
+                & ~group["wicket_type"].isin(["run out", "retired hurt", "obstructing the field"])
+            ].shape[0])
+            overs = round(legal_balls / 6, 1)
+            result.append({
+                "match_id": match_id,
+                "innings": innings,
+                "date": date,
+                "overs": overs,
+                "runs_conceded": runs_conceded,
+                "wickets": wickets,
+            })
+
+    return result
