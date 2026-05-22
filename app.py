@@ -1,23 +1,17 @@
 import streamlit as st
 from utils.data_loader import load_matches
 
-st.title("CricIQ")
-st.write("Cricket Analytics and Insights Platform")
+st.title("🏏 CricIQ")
 
-st.sidebar.title("Navigation")
-format_choice = st.sidebar.selectbox(
-    "Select Format",
-    ["IPL","ODI", "T20I", "Test"]
+st.markdown(
+    "CricIQ is a cricket analytics app built on IPL ball-by-ball data. "
+    "It lets you explore **head-to-head** batter vs bowler matchups, track **player form** "
+    "across recent innings, and predict **match winners** using a trained Random Forest model."
 )
 
-format_paths = {
-    "IPL": "data/raw/ipl",
-    "ODI": "data/raw/odis",
-    "T20I": "data/raw/t20s",
-    "Test": "data/raw/tests"
-}
-
-st.write(f"Loading {format_choice} data...")
-df = load_matches(format_paths[format_choice])
-st.write(f"Loaded {len(df)} deliveries")
-st.dataframe(df.head())
+st.subheader("Features")
+st.markdown("""
+- **Head to Head** — Analyze batter vs bowler matchups using historical IPL data, including runs scored, dismissals, and strike rate.
+- **Player Form** — Track a player's recent performances across innings to understand scoring trends and current form.
+- **Match Predictor** — Predict the winner of an IPL match based on venue, teams, toss result, and season using a Random Forest model.
+""")
