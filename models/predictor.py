@@ -35,10 +35,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+from utils.match_data import add_historical_features
+
 logger = logging.getLogger(__name__)
 
-# Columns the model is trained on (order matters for ColumnTransformer)
-FEATURE_COLS = ["venue", "team1", "team2", "toss_winner", "toss_decision", "season"]
+# Categorical columns — one-hot encoded
+CAT_COLS = ["venue", "team1", "team2", "toss_winner", "toss_decision", "season"]
+
+# Numeric columns — passed through as-is (no encoding needed)
+NUM_COLS = ["team1_venue_win_rate", "head_to_head_win_rate"]
+
+# Full feature list (order matters for ColumnTransformer)
+FEATURE_COLS = CAT_COLS + NUM_COLS
 TARGET_COL = "winner"
 
 
@@ -66,7 +74,7 @@ def train_model(df: pd.DataFrame) -> Pipeline:
         If required columns are missing or if too few samples remain after
         dropping rows with a missing target.
     """
-    _validate_columns(df, FEATURE_COLS + [TARGET_COL])
+    _validate_columns(df, CAT_COLS + [TARGET_COL])
 
     # Drop matches with no recorded winner (e.g. abandoned games)
     df_clean = df.dropna(subset=[TARGET_COL]).copy()
@@ -78,6 +86,10 @@ def train_model(df: pd.DataFrame) -> Pipeline:
 
     # Coerce season to string so it's treated as a categorical label, not a number
     df_clean["season"] = df_clean["season"].astype(str)
+
+    # Compute historical win-rate features (leakage-free: each row only sees
+    # matches that came before it chronologically).
+    df_clean = add_historical_features(df_clean)
 
     X = df_clean[FEATURE_COLS]
     y = df_clean[TARGET_COL]
@@ -111,7 +123,10 @@ def _build_pipeline() -> Pipeline:
     encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
 
     preprocessor = ColumnTransformer(
-        transformers=[("cat", encoder, FEATURE_COLS)],
+        transformers=[
+            ("cat", encoder,        CAT_COLS),  # OHE for categorical features
+            ("num", "passthrough",  NUM_COLS),  # keep numeric features as-is
+        ],
         remainder="drop",
     )
 
@@ -143,6 +158,8 @@ def predict_winner(model: Pipeline, match_details: dict) -> dict:
     match_details:
         Dictionary with keys: venue, team1, team2, toss_winner,
         toss_decision, season.
+        The numeric keys ``team1_venue_win_rate`` and ``head_to_head_win_rate``
+        are optional and default to 0.5 (neutral prior) when absent.
 
     Returns
     -------
@@ -154,12 +171,15 @@ def predict_winner(model: Pipeline, match_details: dict) -> dict:
     Raises
     ------
     ValueError
-        If any required key is missing from ``match_details``.
+        If any required categorical key is missing from ``match_details``.
     """
-    _validate_keys(match_details, FEATURE_COLS)
+    _validate_keys(match_details, CAT_COLS)
 
-    # Build a single-row DataFrame with columns in the same order as training
-    row = {col: [str(match_details[col])] for col in FEATURE_COLS}
+    # Build a single-row DataFrame with columns in the same order as training.
+    # Categorical cols are coerced to str; numeric cols stay as float.
+    row: dict = {col: [str(match_details[col])] for col in CAT_COLS}
+    for col in NUM_COLS:
+        row[col] = [float(match_details.get(col, 0.5))]
     X = pd.DataFrame(row)
 
     predicted_class: str = model.predict(X)[0]
@@ -226,12 +246,16 @@ if __name__ == "__main__":
     model = train_model(df)
 
     sample = {
-        "venue":         df["venue"].iloc[0],
-        "team1":         df["team1"].iloc[0],
-        "team2":         df["team2"].iloc[0],
-        "toss_winner":   df["toss_winner"].iloc[0],
-        "toss_decision": df["toss_decision"].iloc[0],
-        "season":        str(df["season"].iloc[0]),
+        "venue":                   df["venue"].iloc[0],
+        "team1":                   df["team1"].iloc[0],
+        "team2":                   df["team2"].iloc[0],
+        "toss_winner":             df["toss_winner"].iloc[0],
+        "toss_decision":           df["toss_decision"].iloc[0],
+        "season":                  str(df["season"].iloc[0]),
+        # Numeric features — omit to use the neutral 0.5 default, or supply
+        # a pre-computed value from add_historical_features for real inference.
+        "team1_venue_win_rate":    0.5,
+        "head_to_head_win_rate":   0.5,
     }
 
     result = predict_winner(model, sample)
